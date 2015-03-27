@@ -1,0 +1,15 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<Package xmlns="urn:Constellation.Deployment"
+         Name="Nest"
+         Version="1.0"
+         Author="Sébastien Warin"
+         URL="http://sebastien.warin.fr"
+         Description="Interface with Nest devices"
+         EnableControlHub="false">
+  <Compatibility constellationVersion="1.7" dotNetTargetPlatform="net45" />
+  <Settings>
+    <Setting name="ClientId" isRequired="true" type="String" />
+    <Setting name="ClientSecret" isRequired="true" type="String" />
+    <Setting name="AccessToken" isRequired="true" type="String" />
+  </Settings>
+</Package>
