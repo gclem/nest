@@ -48,18 +48,32 @@ namespace Nest
             PackageHost.WriteInfo("Connected to Nest streaming API");
         }
 
+        /// <summary>
+        /// Sets the away mode.
+        /// </summary>
+        /// <param name="isAway">if set to <c>true</c> if is away.</param>
         [MessageCallback]
         public void SetAwayMode(bool isAway)
         {
             this.SetProperty("structures/" + structures.First().Key, "away", isAway ? "away" : "home");
         }
 
+        /// <summary>
+        /// Sets the target temperature for the first thermostat.
+        /// </summary>
+        /// <param name="temperature">The temperature.</param>
         [MessageCallback]
         public void SetTargetTemperature(double temperature)
         {
             this.SetProperty("devices/thermostats/" + thermostats.First().Key, "target_temperature_c", temperature);        
         }
 
+        /// <summary>
+        /// Sets the property for a specified path.
+        /// </summary>
+        /// <param name="path">The path.</param>
+        /// <param name="propertyName">Name of the property.</param>
+        /// <param name="value">The value.</param>
         [MessageCallback]
         private void SetProperty(string path, string propertyName, object value)
         {
