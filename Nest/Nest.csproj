@@ -70,15 +70,17 @@
     <Compile Include="AuthentificationManager.cs" />
     <Compile Include="Entities\NestObjectCollection.cs" />
     <Compile Include="Entities\NestObjectType.cs" />
-    <Compile Include="Entities\NestObjectConfiguration.cs" />
+    <Compile Include="Entities\NestObject.cs" />
     <Compile Include="Entities\SmokeCoAlarm.cs" />
     <Compile Include="Entities\Structure.cs" />
     <Compile Include="Entities\Thermostat.cs" />
+    <Compile Include="Factories\NestObjectFactory.cs" />
     <Compile Include="FirebaseSharp\Firebase.cs" />
     <Compile Include="FirebaseSharp\FirebaseCache.cs" />
     <Compile Include="FirebaseSharp\Request.cs" />
     <Compile Include="FirebaseSharp\Response.cs" />
     <Compile Include="FirebaseSharp\StreamingEvent.cs" />
+    <Compile Include="Helpers\EnumerationExtensions.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
