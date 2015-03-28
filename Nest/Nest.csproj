@@ -68,6 +68,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AuthentificationManager.cs" />
+    <Compile Include="Entities\NestChannel.cs" />
     <Compile Include="Entities\NestObjectCollection.cs" />
     <Compile Include="Entities\NestObjectType.cs" />
     <Compile Include="Entities\NestObject.cs" />

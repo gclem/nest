@@ -37,7 +37,7 @@ namespace Nest
             PackageHost.WriteInfo("Pushing inital state objects");
             foreach (var item in nestRegister.OrderBy(x => x.Type))
             {
-                PackageHost.PushStateObject(item.Properties.name, item.Properties, item.SystemId);
+                PackageHost.PushStateObject(item.Properties["name"], item.Properties, item.SystemId);
             }   
    
             // Started !
@@ -123,73 +123,109 @@ namespace Nest
             return new Firebase(NEST_ROOT_URI, PackageHost.GetSettingValue<string>("AccessToken"));
         }
 
-        private void Subscribe(NestObjectType nestType)
+        private void Subscribe(NestChannel channel)
         {
-            //// Getting configuration
-            var item = NestObjectFactory.Create(nestType);
-
-            //// Dictionary<string, dynamic> source, Regex pathRegex, string path, string soTypeName
-            PackageHost.WriteInfo("Subscribing to {0} ({1})", item.BasePath, item.SystemId);
+            PackageHost.WriteInfo("Subscribing to {0}", channel.ToString());
             Firebase fb = this.CreateFirebaseClient();
+            NestObject nestObjectReturned = null;
 
-            var streaming = fb.GetStreaming(item.BasePath,
+            var streaming = fb.GetStreaming(channel.ToString(),
                 added: (s, e) =>
                 {
-                    this.ProcessObject(item, e.Path, e.Data);
+                    this.ProcessObject(channel, e.Path, e.Data, out nestObjectReturned);
                 },
                 changed: (s, e) =>
                 {
                     if (e.OldData != e.Data)
                     {
-                        var obj = this.ProcessObject(item, e.Path, e.Data);
-                        PackageHost.PushStateObject(obj.name, obj, item.SystemId);
+                        var obj = this.ProcessObject(channel, e.Path, e.Data, out nestObjectReturned);
+
+                        if(obj != null)
+                            PackageHost.PushStateObject(obj.name, obj, nestObjectReturned.SystemId);
                     }
                 });
             streaming.Canceled += (s, e) =>
             {
-                PackageHost.WriteWarn("Streaming of {0} ({1}) is cancelled", item.BasePath, item.SystemId);
-                this.Subscribe(item.Type);
+                PackageHost.WriteWarn("Streaming of {0} ({1}) is cancelled", null,null);
+                this.Subscribe(channel);
             };
         }
 
         private void SubscribeAll()
         {
-            this.Subscribe(NestObjectType.STRUCTURE);
-            this.Subscribe(NestObjectType.THERMOSTATS);
-            this.Subscribe(NestObjectType.SMOKE_CO_ALARM);
+            this.Subscribe(NestChannel.structures);
+            this.Subscribe(NestChannel.devices);
         }
 
-        private dynamic ProcessObject(NestObject item, string path, string value)
+        private dynamic Parse(NestChannel channel, string path)
         {
-            var m = item.Regex.Match(path);
+            dynamic result = new ExpandoObject();
+            Match m = null;
+
+            switch (channel)
+            {
+                case NestChannel.structures:
+                    //// Matching structure regex
+                    m = Regex.Match(path, Structure.REGEX, RegexOptions.Compiled);
+                    result.ObjectType = NestObjectType.STRUCTURE;
+                    break;
+                case NestChannel.devices:
+                    //// Matching thermostat regex
+                    m = Regex.Match(path, Thermostat.REGEX, RegexOptions.Compiled);
+                    result.ObjectType = NestObjectType.THERMOSTATS;
+
+                    //// Matching smoke co alarm regex
+                    if (!m.Success)
+                    {
+                        m = Regex.Match(path, SmokeCoAlarm.REGEX, RegexOptions.Compiled);
+                        result.ObjectType = NestObjectType.SMOKE_CO_ALARM;
+                    }
+                    break;
+                default:
+                    break;
+            }
 
             if (m.Success)
             {
-                var id = m.Groups[1].Value;
-                var propertyName = m.Groups[2].Value;
+                result.Id = m.Groups[1].Value;
+                result.PropertyName = m.Groups[2].Value;
 
-                var storeObject = this.nestRegister.Get(id);
+                return result;
+            }
+
+            return null;
+        }
+
+        private dynamic ProcessObject(NestChannel channel, string path, string value, out NestObject storeObject)
+        {
+            var m = this.Parse(channel, path);
+
+            if (m != null)
+            {
+                storeObject = this.nestRegister.Get(m.Id);
                 if (storeObject == null)
                 {
-                    storeObject = this.nestRegister.Add(item.Type);
+                    storeObject = this.nestRegister.Add(m.ObjectType);
+                    storeObject.NestId = m.Id;
                 }
 
                 var objectContent = storeObject.Properties as IDictionary<string, Object>;
                 
-                if (!objectContent.ContainsKey(propertyName))
+                if (!objectContent.ContainsKey(m.PropertyName))
                 {
-                    PackageHost.WriteInfo("[{2}] Added property of {3} :  {0} = {1}", propertyName, value, storeObject.SystemId, id);
-                    objectContent.Add(propertyName, value);
+                    PackageHost.WriteInfo("[{2}] Added property of {3} :  {0} = {1}", m.PropertyName, value, storeObject.SystemId, m.Id);
+                    objectContent.Add(m.PropertyName, value);
                 }
                 else
                 {
-                    PackageHost.WriteInfo("[{2}] Updated property of {3} : {0} = {1}", propertyName, value, storeObject.SystemId, id);
-                    objectContent[propertyName] = value;
+                    PackageHost.WriteInfo("[{2}] Updated property of {3} : {0} = {1}", m.PropertyName, value, storeObject.SystemId, m.Id);
+                    objectContent[m.PropertyName] = value;
                 }
                 return objectContent;
             }
             else
             {
+                storeObject = null;
                 return null;
             }
         }
