@@ -2,11 +2,15 @@
 
 This package connect your Nest devices into your Constellation.
 
-The package push as StateObjects your Nest structure and Thermostat. The smoke detector (Nest Protect) is not yet supported in version 1.0.
+The package push as StateObjects your Nest structure and Thermostat.
+
+### News
+   - Added Smoke CO alarm support
+   - Added multi device targetting support
 
 ### MessageCallbacks
   - SetAwayMode(bool) : Sets the away mode.
-  - SetTargetTemperature(double) : Sets the target temperature for the first thermostat. (TODO : support multiple thermostat)
+  - SetTargetTemperature(double) : Sets the target temperature for the first thermostat.
   - SetProperty(string path, string propertyName, object value) : Sets the property for a specified path.
 
 ### Installation
