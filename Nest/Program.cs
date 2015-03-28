@@ -1,5 +1,6 @@
 ﻿using Constellation.Host;
 using FirebaseSharp.Portable;
+using Nest.Entities;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -13,11 +14,7 @@ namespace Nest
     {
         private const string NEST_ROOT_URI = "https://developer-api.nest.com";
 
-        private readonly Regex thermostatPathRegex = new Regex(@"\/devices\/thermostats\/(.*)\/(.*)", RegexOptions.Compiled);
-        private readonly Regex structurePathRegex = new Regex(@"\/structures\/(.*)\/(.*)", RegexOptions.Compiled);
-
-        private Dictionary<string, dynamic> structures = new Dictionary<string, dynamic>();
-        private Dictionary<string, dynamic> thermostats = new Dictionary<string, dynamic>();
+        private NestObjectCollection nestRegister = null;
 
         static void Main(string[] args)
         {
@@ -26,23 +23,24 @@ namespace Nest
 
         public override void OnStart()
         {
-            PackageHost.WriteInfo("Connecting to NEST streaming API ...");
+            //// Init
+            this.InitDataObjects();
 
-            // Subscribe to streaming
-            this.Subscribe(thermostats, thermostatPathRegex, "devices", "Nest.Thermostat");
-            this.Subscribe(structures, structurePathRegex, "structures", "Nest.Structure");
+            PackageHost.WriteInfo("Connecting to NEST streaming API ... Waiting 3s...");
+
+            // Subscribe to streaming for all kinds of objects
+            this.SubscribeAll();
 
             // Push initial SO
-            System.Threading.Thread.Sleep(2000);
+            System.Threading.Thread.Sleep(3000);
             PackageHost.WriteInfo("Pushing inital state objects");
-            foreach (var item in thermostats)
+            foreach (var item in nestRegister)
             {
-                PackageHost.PushStateObject(item.Value.name, item.Value, "Nest.Thermostat");
-            }
-            foreach (var item in structures)
-            {
-                PackageHost.PushStateObject(item.Value.name, item.Value, "Nest.Structure");
-            }         
+                foreach (var device in item.Value)
+                {
+                    PackageHost.PushStateObject(device.Value.name, device.Value, item.Key.SystemId);
+                }
+            }   
    
             // Started !
             PackageHost.WriteInfo("Connected to Nest streaming API");
@@ -53,9 +51,23 @@ namespace Nest
         /// </summary>
         /// <param name="isAway">if set to <c>true</c> if is away.</param>
         [MessageCallback]
-        public void SetAwayMode(bool isAway)
+        public void SetAwayMode(bool isAway, string id = "")
         {
-            this.SetProperty("structures/" + structures.First().Key, "away", isAway ? "away" : "home");
+            var structureStore = this.nestRegister.GetObjectStore(NestObjectType.STRUCTURE);
+
+            if(string.IsNullOrEmpty(id) && structureStore.Count == 0)
+            {
+                PackageHost.WriteWarn("No Structure available to set away.");
+                return;
+            }
+
+            if(!structureStore.ContainsKey(id))
+            {
+                PackageHost.WriteWarn("No Structure with this id is available to set away.");
+                return;
+            }
+
+            this.SetProperty("structures/" + id == "" ? structureStore.First().Key : id, "away", isAway ? "away" : "home");
         }
 
         /// <summary>
@@ -63,9 +75,35 @@ namespace Nest
         /// </summary>
         /// <param name="temperature">The temperature.</param>
         [MessageCallback]
-        public void SetTargetTemperature(double temperature)
+        public void SetTargetTemperature(double temperature, string id = "")
         {
-            this.SetProperty("devices/thermostats/" + thermostats.First().Key, "target_temperature_c", temperature);        
+            var store = this.nestRegister.GetObjectStore(NestObjectType.THERMOSTATS);
+
+            if (string.IsNullOrEmpty(id) && store.Count == 0)
+            {
+                PackageHost.WriteWarn("No thermostat available to set away.");
+                return;
+            }
+
+            if (!store.ContainsKey(id))
+            {
+                PackageHost.WriteWarn("No thermostat with this id is available to set away.");
+                return;
+            }
+
+            this.SetProperty("devices/thermostats/" + store.First().Key, "target_temperature_c", temperature);
+        }
+
+        /// <summary>
+        ///  Init available data objects to subscribe
+        /// </summary>
+        private void InitDataObjects()
+        {
+            this.nestRegister = new NestObjectCollection();
+
+            this.nestRegister.Add(new Thermostat());
+            this.nestRegister.Add(new SmokeCoAlarm());
+            this.nestRegister.Add(new Structure());
         }
 
         /// <summary>
@@ -91,50 +129,61 @@ namespace Nest
             return new Firebase(NEST_ROOT_URI, PackageHost.GetSettingValue<string>("AccessToken"));
         }
 
-        private void Subscribe(Dictionary<string, dynamic> source, Regex pathRegex, string path, string soTypeName)
+        private void Subscribe(NestObjectConfiguration item)
         {
-            PackageHost.WriteInfo("Subscribing to {0} ({1})", path, soTypeName);
+            //// Dictionary<string, dynamic> source, Regex pathRegex, string path, string soTypeName
+            PackageHost.WriteInfo("Subscribing to {0} ({1})", item.BasePath, item.SystemId);
             Firebase fb = this.CreateFirebaseClient();
-            var streaming = fb.GetStreaming(path,
+
+            var streaming = fb.GetStreaming(item.BasePath,
                 added: (s, e) =>
                 {
-                    this.ProcessObject(source, pathRegex, e.Path, e.Data);
+                    this.ProcessObject(item, e.Path, e.Data);
                 },
                 changed: (s, e) =>
                 {
                     if (e.OldData != e.Data)
                     {
-                        var obj = this.ProcessObject(source, pathRegex, e.Path, e.Data);
-                        PackageHost.PushStateObject(obj.name, obj, soTypeName);
+                        var obj = this.ProcessObject(item, e.Path, e.Data);
+                        PackageHost.PushStateObject(obj.name, obj, item.SystemId);
                     }
                 });
             streaming.Canceled += (s, e) =>
             {
-                PackageHost.WriteWarn("Streaming of {0} ({1}) is cancelled", path, soTypeName);
-                this.Subscribe(source, pathRegex, path, soTypeName);
+                PackageHost.WriteWarn("Streaming of {0} ({1}) is cancelled", item.BasePath, item.SystemId);
+                this.Subscribe(item);
             };
         }
 
-        private dynamic ProcessObject(Dictionary<string, dynamic> source, Regex pathRegex, string path, string value)
+        private void SubscribeAll()
         {
-            var m = pathRegex.Match(path);
+            foreach (var item in this.nestRegister.Keys)
+            {
+                this.Subscribe(item);
+            }
+        }
+
+        private dynamic ProcessObject(NestObjectConfiguration config, string path, string value)
+        {
+            var m = config.Regex.Match(path);
             if (m.Success)
             {
                 var id = m.Groups[1].Value;
-                if (!source.ContainsKey(id))
+                var configStore = this.nestRegister.GetObjectStore(config);
+                if (!configStore.ContainsKey(id))
                 {
-                    source.Add(id, new ExpandoObject());
+                    configStore.Add(id, new ExpandoObject());
                 }
-                var objectContent = source[id] as IDictionary<string, Object>;
+                var objectContent = configStore[id] as IDictionary<string, Object>;
                 var propertyName = m.Groups[2].Value;
                 if (!objectContent.ContainsKey(propertyName))
                 {
-                    PackageHost.WriteInfo("[{2}] Added property {0} = {1}", propertyName, value, path.StartsWith("/structures") ? "Structure" : "Thermostat");
+                    PackageHost.WriteInfo("[{2}] Added property of {3} :  {0} = {1}", propertyName, value, config.SystemId, id);
                     objectContent.Add(propertyName, value);
                 }
                 else
                 {
-                    PackageHost.WriteInfo("[{2}] Updated property {0} = {1}", propertyName, value, path.StartsWith("/structures") ? "Structure" : "Thermostat");
+                    PackageHost.WriteInfo("[{2}] Updated property of {3} : {0} = {1}", propertyName, value, config.SystemId, id);
                     objectContent[propertyName] = value;
                 }
                 return objectContent;

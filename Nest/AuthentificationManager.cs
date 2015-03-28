@@ -22,7 +22,7 @@ namespace Nest
 
                 string pinCode = Console.ReadLine();
 
-                string url = string.Format("",
+                string url = string.Format(accessTokenUrl,
                  pinCode, PackageHost.GetSettingValue<string>("ClientId"), PackageHost.GetSettingValue<string>("ClientSecret"));
 
                 using (var httpClient = new HttpClient())
