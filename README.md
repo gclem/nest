@@ -8,9 +8,12 @@ The package push as StateObjects your Nest structure and Thermostat.
    - Added Smoke CO alarm support
    - Added multi device targetting support
 
+### Incoming
+   - All Specific Smoke CO alarms implementated
+
 ### MessageCallbacks
-  - SetAwayMode(bool) : Sets the away mode.
-  - SetTargetTemperature(double) : Sets the target temperature for the first thermostat.
+  - SetAwayMode(bool, string id = "") : Sets the away mode to the first structure, or the specified one.
+  - SetTargetTemperature(double, string id = "") : Sets the target temperature for the first thermostat, or the specified one.
   - SetProperty(string path, string propertyName, object value) : Sets the property for a specified path.
 
 ### Installation
